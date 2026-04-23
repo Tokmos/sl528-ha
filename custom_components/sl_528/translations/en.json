@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SL Bus Line 528 – GPS",
+        "description": "Enter your API key from trafiklab.se (GTFS Regional Realtime).",
+        "data": {
+          "api_key": "Trafiklab API key"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid API key. Check trafiklab.se.",
+      "cannot_connect": "Could not connect to Trafiklab."
+    },
+    "abort": {
+      "already_configured": "SL 528 is already configured."
+    }
+  }
+}

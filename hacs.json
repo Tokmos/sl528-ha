@@ -1,0 +1,10 @@
+{
+  "name": "SL Busslinje 528 GPS",
+  "domain": "sl_528",
+  "documentation": "https://github.com/DITTNAMN/sl528-ha-integration",
+  "bugtracker": "https://github.com/DITTNAMN/sl528-ha-integration/issues",
+  "homeassistant": "2023.1.0",
+  "codeowners": [],
+  "requirements": [],
+  "iot_class": "cloud_polling"
+}
