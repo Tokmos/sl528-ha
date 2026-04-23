@@ -3,14 +3,15 @@
     "step": {
       "user": {
         "title": "SL Busslinje 528 – GPS",
-        "description": "Ange din API-nyckel från trafiklab.se (GTFS Regional Realtime).",
+        "description": "Ange dina API-nycklar från trafiklab.se.",
         "data": {
-          "api_key": "Trafiklab API-nyckel"
+          "rt_key": "Realtids-API-nyckel (GTFS Regional Realtime)",
+          "static_key": "Statisk API-nyckel (GTFS Regional)"
         }
       }
     },
     "error": {
-      "invalid_auth": "Ogiltig API-nyckel. Kontrollera på trafiklab.se.",
+      "invalid_auth": "Ogiltig realtids-API-nyckel.",
       "cannot_connect": "Kunde inte ansluta till Trafiklab."
     },
     "abort": {

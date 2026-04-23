@@ -7,19 +7,22 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN, GTFS_RT_URL
+from .const import DOMAIN, GTFS_RT_URL, GTFS_STATIC_URL
 
 STEP_SCHEMA = vol.Schema({
-    vol.Required("api_key"): str,
+    vol.Required("rt_key"): str,
+    vol.Required("static_key"): str,
 })
 
 
-async def _validate_key(hass: HomeAssistant, api_key: str) -> str | None:
+async def _validate_keys(hass: HomeAssistant, rt_key: str, static_key: str) -> str | None:
     """Returnerar None om OK, annars en error-sträng."""
-    url = GTFS_RT_URL.format(api_key=api_key)
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            async with session.get(
+                GTFS_RT_URL.format(rt_key=rt_key),
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
                 if resp.status == 401:
                     return "invalid_auth"
                 if resp.status not in (200, 304):
@@ -30,8 +33,6 @@ async def _validate_key(hass: HomeAssistant, api_key: str) -> str | None:
 
 
 class SL528ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Konfigureringsflöde för SL 528."""
-
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
@@ -40,7 +41,11 @@ class SL528ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
 
-            error = await _validate_key(self.hass, user_input["api_key"])
+            error = await _validate_keys(
+                self.hass,
+                user_input["rt_key"],
+                user_input["static_key"]
+            )
             if error:
                 errors["base"] = error
             else:
@@ -53,5 +58,4 @@ class SL528ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=STEP_SCHEMA,
             errors=errors,
-            description_placeholders={},
         )

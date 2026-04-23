@@ -11,9 +11,12 @@ PLATFORMS = ["device_tracker"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    coordinator = SL528Coordinator(hass, entry.data["api_key"])
+    coordinator = SL528Coordinator(
+        hass,
+        rt_key=entry.data["rt_key"],
+        static_key=entry.data["static_key"],
+    )
     await coordinator.async_config_entry_first_refresh()
-
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
