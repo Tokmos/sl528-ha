@@ -1,4 +1,4 @@
-"""DataUpdateCoordinator – hämtar och avkodar GTFS-RT VehiclePositions för SL."""
+"""DataUpdateCoordinator – hämtar och avkodar GTFS-RT VehiclePositions för SL linje 528."""
 from __future__ import annotations
 
 import logging
@@ -14,7 +14,8 @@ from .const import DOMAIN, GTFS_RT_URL, SCAN_INTERVAL_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
 
-TARGET_LINE = "528"
+# SL:s trip_id slutar på linjenumret, t.ex. '14010000718115528' för linje 528
+TARGET_SUFFIX = "528"
 
 
 class SL528Coordinator(DataUpdateCoordinator):
@@ -34,7 +35,9 @@ class SL528Coordinator(DataUpdateCoordinator):
         """Hämta och filtrera fordonspositioner. Returnerar dict keyed på vehicle_id."""
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(self.url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                async with session.get(
+                    self.url, timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
                     if resp.status == 401:
                         raise UpdateFailed("Ogiltig API-nyckel (401)")
                     if resp.status != 200:
@@ -52,22 +55,15 @@ class SL528Coordinator(DataUpdateCoordinator):
                 continue
             vp = entity.vehicle
 
-            # Filtrera på linje 528
-            route_id = vp.trip.route_id if vp.HasField("trip") else ""
-            short_name = vp.trip.route_id  # GTFS-RT för SL har route_id = linjenummer
-            descriptor_label = ""
-            if hasattr(vp, "trip") and vp.trip.route_id:
-                descriptor_label = vp.trip.route_id
-
-            # SL:s GTFS route_id är vanligtvis på formatet "1:528" eller bara "528"
-            if TARGET_LINE not in descriptor_label:
+            # SL:s trip_id slutar på linjenumret, t.ex. '14010000718115528'
+            trip_id = vp.trip.trip_id if vp.HasField("trip") else ""
+            if not trip_id.endswith(TARGET_SUFFIX):
                 continue
 
             if not (vp.position.latitude and vp.position.longitude):
                 continue
 
-            vehicle_id = vp.vehicle.id or vp.vehicle.label or entity.id
-            trip_id = vp.trip.trip_id if vp.HasField("trip") else ""
+            vehicle_id = vp.vehicle.id or entity.id
 
             vehicles[vehicle_id] = {
                 "latitude": vp.position.latitude,
@@ -77,7 +73,7 @@ class SL528Coordinator(DataUpdateCoordinator):
                 "vehicle_id": vehicle_id,
                 "vehicle_label": vp.vehicle.label or vehicle_id,
                 "trip_id": trip_id,
-                "route_id": descriptor_label,
+                "route_id": vp.trip.route_id if vp.HasField("trip") else "",
                 "current_stop_sequence": vp.current_stop_sequence or None,
                 "timestamp": vp.timestamp or None,
             }
