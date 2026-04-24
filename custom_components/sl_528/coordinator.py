@@ -17,6 +17,11 @@ from .const import DOMAIN, GTFS_RT_URL, GTFS_STATIC_URL, ROUTE_ID_528, SCAN_INTE
 
 _LOGGER = logging.getLogger(__name__)
 
+DIRECTION_NAMES = {
+    "0": "→ Sollentuna station",
+    "1": "→ Helenelunds station",
+}
+
 
 class SL528Coordinator(DataUpdateCoordinator):
     """Hämtar GPS-positioner för buss 528 från Trafiklab var 15:e sekund."""
@@ -26,7 +31,7 @@ class SL528Coordinator(DataUpdateCoordinator):
         self.static_key = static_key
         self.rt_url = GTFS_RT_URL.format(rt_key=rt_key)
         self.static_url = GTFS_STATIC_URL.format(static_key=static_key)
-        self._trip_ids_528: set[str] = set()
+        self._trip_ids_528: dict[str, str] = {}  # trip_id -> direction_id
         super().__init__(
             hass,
             _LOGGER,
@@ -35,26 +40,26 @@ class SL528Coordinator(DataUpdateCoordinator):
         )
 
     async def async_load_trip_ids(self) -> None:
-        """Ladda trips.txt från GTFS statisk data och bygg set med trip_ids för linje 528."""
-        _LOGGER.debug("Hämtar GTFS statisk data för att hitta trip_ids för linje 528...")
+        """Ladda trips.txt och bygg dict med trip_id -> direction_id för linje 528."""
+        _LOGGER.debug("Hämtar GTFS statisk data...")
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     self.static_url, timeout=aiohttp.ClientTimeout(total=60)
                 ) as resp:
                     if resp.status != 200:
-                        raise UpdateFailed(f"Kunde inte hämta GTFS statisk data: HTTP {resp.status}")
+                        raise UpdateFailed(f"HTTP {resp.status} vid hämtning av statisk data")
                     raw = await resp.read()
 
-            def parse_trips(data: bytes) -> set[str]:
-                trip_ids = set()
+            def parse_trips(data: bytes) -> dict[str, str]:
+                trips = {}
                 with zipfile.ZipFile(io.BytesIO(data)) as z:
                     with z.open("trips.txt") as f:
                         reader = csv.DictReader(io.TextIOWrapper(f, encoding="utf-8"))
                         for row in reader:
                             if row.get("route_id") == ROUTE_ID_528:
-                                trip_ids.add(row["trip_id"])
-                return trip_ids
+                                trips[row["trip_id"]] = row.get("direction_id", "0")
+                return trips
 
             self._trip_ids_528 = await self.hass.async_add_executor_job(parse_trips, raw)
             _LOGGER.info("Hittade %d trip_ids för linje 528", len(self._trip_ids_528))
@@ -97,6 +102,8 @@ class SL528Coordinator(DataUpdateCoordinator):
                 continue
 
             vehicle_id = vp.vehicle.id or entity.id
+            direction_id = self._trip_ids_528[trip_id]
+            destination = DIRECTION_NAMES.get(direction_id, "Linje 528")
             speed_ms = vp.position.speed if vp.position.speed else None
 
             vehicles[vehicle_id] = {
@@ -107,6 +114,8 @@ class SL528Coordinator(DataUpdateCoordinator):
                 "vehicle_id": vehicle_id,
                 "vehicle_label": vp.vehicle.label or vehicle_id,
                 "trip_id": trip_id,
+                "direction_id": direction_id,
+                "destination": destination,
                 "current_stop_sequence": vp.current_stop_sequence or None,
                 "timestamp": vp.timestamp or None,
             }
