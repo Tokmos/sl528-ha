@@ -15,10 +15,6 @@ STEP_SCHEMA = vol.Schema({
     vol.Required("line", default=DEFAULT_LINE): str,
 })
 
-OPTIONS_SCHEMA = vol.Schema({
-    vol.Required("line", default=DEFAULT_LINE): str,
-})
-
 
 async def _validate_rt_key(hass: HomeAssistant, rt_key: str) -> str | None:
     try:
@@ -65,31 +61,26 @@ class SLBusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return SLBusOptionsFlow(config_entry)
+        return SLBusOptionsFlow()
 
 
 class SLBusOptionsFlow(config_entries.OptionsFlow):
     """Options flow – byt linje utan att installera om."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
-
     async def async_step_init(self, user_input=None):
-        errors = {}
-        current_line = self.config_entry.options.get(
-            "line", self.config_entry.data.get("line", DEFAULT_LINE)
-        )
-
         if user_input is not None:
             return self.async_create_entry(
                 title=f"SL Busslinje {user_input['line']}",
                 data=user_input,
             )
 
+        current_line = self.config_entry.options.get(
+            "line", self.config_entry.data.get("line", DEFAULT_LINE)
+        )
+
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required("line", default=current_line): str,
             }),
-            errors=errors,
         )

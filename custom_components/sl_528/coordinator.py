@@ -89,10 +89,11 @@ class SLBusCoordinator(DataUpdateCoordinator):
                         return
                     lines = await resp.json()
 
+            _LOGGER.debug("Transport API svarade med typ: %s, exempel: %s", type(lines), str(lines)[:200])
             for line in lines:
+                if not isinstance(line, dict):
+                    continue
                 if str(line.get("designation", "")) == self.line or str(line.get("name", "")) == self.line:
-                    # Transport API ger inte route_id direkt – bygg det från GTFS-format
-                    # Faller tillbaka på trips.txt för kopplingen
                     self._route_id = str(line.get("id", ""))
                     _LOGGER.debug("Hittade linje %s med id %s", self.line, self._route_id)
                     return
@@ -161,6 +162,8 @@ class SLBusCoordinator(DataUpdateCoordinator):
 
             line_id = None
             for line in lines:
+                if not isinstance(line, dict):
+                    continue
                 if str(line.get("designation", "")) == self.line:
                     line_id = line.get("id")
                     break
@@ -180,6 +183,8 @@ class SLBusCoordinator(DataUpdateCoordinator):
             # Gruppera per direction och ta första/sista
             stops_by_dir: dict[str, list] = {}
             for sp in stop_points:
+                if not isinstance(sp, dict):
+                    continue
                 d = str(sp.get("direction_id", sp.get("direction", "0")))
                 stops_by_dir.setdefault(d, []).append(sp)
 
