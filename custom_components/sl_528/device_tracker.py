@@ -1,4 +1,4 @@
-"""Device tracker – en entitet per buss, tas bort när bussen slutar."""
+"""Device tracker – en entitet per buss, tas bort när bussen slutar eller saknar position."""
 from __future__ import annotations
 
 import logging
@@ -28,15 +28,23 @@ async def async_setup_entry(
 
     @callback
     def _handle_update() -> None:
+        # Fordon som är aktiva OCH har giltiga koordinater
+        active = {
+            vid for vid, data in coordinator.data.items()
+            if data.get("latitude") and data.get("longitude")
+        }
+
+        # Lägg till nya
         new_entities = []
-        for vehicle_id in coordinator.data:
+        for vehicle_id in active:
             if vehicle_id not in known:
                 known.add(vehicle_id)
                 new_entities.append(BusTracker(coordinator, vehicle_id))
         if new_entities:
             async_add_entities(new_entities)
 
-        gone = known - set(coordinator.data.keys())
+        # Ta bort fordon som försvunnit eller saknar position
+        gone = known - active
         if gone:
             registry = er.async_get(hass)
             for vehicle_id in gone:
@@ -45,6 +53,7 @@ async def async_setup_entry(
                 entity_id = registry.async_get_entity_id("device_tracker", DOMAIN, unique_id)
                 if entity_id:
                     registry.async_remove(entity_id)
+                    _LOGGER.debug("Tog bort fordon %s (%s)", vehicle_id, entity_id)
 
     coordinator.async_add_listener(_handle_update)
     _handle_update()
@@ -61,7 +70,11 @@ class BusTracker(CoordinatorEntity[SLBusCoordinator], TrackerEntity):
 
     @property
     def _data(self) -> dict | None:
-        return self.coordinator.data.get(self._vehicle_id)
+        d = self.coordinator.data.get(self._vehicle_id)
+        # Returnera None om koordinater saknas
+        if d and d.get("latitude") and d.get("longitude"):
+            return d
+        return None
 
     @property
     def name(self) -> str:
