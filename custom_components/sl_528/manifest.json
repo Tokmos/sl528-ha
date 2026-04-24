@@ -1,7 +1,7 @@
 {
   "domain": "sl_528",
-  "name": "SL Busslinje 528 GPS",
-  "version": "1.0.0",
+  "name": "SL Busslinje GPS",
+  "version": "2.0.0",
   "documentation": "https://github.com/DITTNAMN/sl528-ha-integration",
   "issue_tracker": "https://github.com/DITTNAMN/sl528-ha-integration/issues",
   "requirements": ["gtfs-realtime-bindings==1.0.0", "protobuf>=3.20.0"],

@@ -1,4 +1,4 @@
-"""Device tracker – en entitet per buss på linje 528."""
+"""Device tracker – en entitet per buss, tas bort när bussen slutar."""
 from __future__ import annotations
 
 import logging
@@ -13,7 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import SL528Coordinator
+from .coordinator import SLBusCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,11 +23,11 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: SL528Coordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: SLBusCoordinator = hass.data[DOMAIN][entry.entry_id]
     known: set[str] = set()
 
     @callback
-    def _handle_coordinator_update() -> None:
+    def _handle_update() -> None:
         new_entities = []
         for vehicle_id in coordinator.data:
             if vehicle_id not in known:
@@ -41,26 +41,23 @@ async def async_setup_entry(
             registry = er.async_get(hass)
             for vehicle_id in gone:
                 known.discard(vehicle_id)
-                unique_id = f"sl_528_{vehicle_id}"
+                unique_id = f"sl_bus_{coordinator.line}_{vehicle_id}"
                 entity_id = registry.async_get_entity_id("device_tracker", DOMAIN, unique_id)
                 if entity_id:
                     registry.async_remove(entity_id)
-                    _LOGGER.debug("Tog bort fordon %s", vehicle_id)
 
-    coordinator.async_add_listener(_handle_coordinator_update)
-    _handle_coordinator_update()
+    coordinator.async_add_listener(_handle_update)
+    _handle_update()
 
 
-class BusTracker(CoordinatorEntity[SL528Coordinator], TrackerEntity):
-    """Representerar ett enskilt fordon på linje 528."""
-
+class BusTracker(CoordinatorEntity[SLBusCoordinator], TrackerEntity):
     _attr_icon = "mdi:bus"
     _attr_source_type = SourceType.GPS
 
-    def __init__(self, coordinator: SL528Coordinator, vehicle_id: str) -> None:
+    def __init__(self, coordinator: SLBusCoordinator, vehicle_id: str) -> None:
         super().__init__(coordinator)
         self._vehicle_id = vehicle_id
-        self._attr_unique_id = f"sl_528_{vehicle_id}"
+        self._attr_unique_id = f"sl_bus_{coordinator.line}_{vehicle_id}"
 
     @property
     def _data(self) -> dict | None:
@@ -69,9 +66,10 @@ class BusTracker(CoordinatorEntity[SL528Coordinator], TrackerEntity):
     @property
     def name(self) -> str:
         d = self._data
-        if d:
-            return f"528 {d.get('destination', '')}"
-        return "528"
+        line = self.coordinator.line
+        if d and d.get("destination"):
+            return f"{line} {d['destination']}"
+        return f"Linje {line}"
 
     @property
     def available(self) -> bool:
@@ -92,7 +90,7 @@ class BusTracker(CoordinatorEntity[SL528Coordinator], TrackerEntity):
         d = self._data or {}
         speed_ms = d.get("speed_ms")
         return {
-            "linje": "528",
+            "linje": d.get("line"),
             "destination": d.get("destination"),
             "fordon_id": d.get("vehicle_id"),
             "tur_id": d.get("trip_id"),
