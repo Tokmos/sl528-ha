@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SL Busslinje – GPS-positioner",
+        "description": "Ange dina API-nycklar från trafiklab.se och vilket linjenummer du vill följa.",
+        "data": {
+          "rt_key": "Realtids-API-nyckel (GTFS Regional Realtime)",
+          "static_key": "Statisk API-nyckel (GTFS Regional)",
+          "line": "Linjenummer (t.ex. 528)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Ogiltig realtids-API-nyckel.",
+      "cannot_connect": "Kunde inte ansluta till Trafiklab."
+    },
+    "abort": {
+      "already_configured": "Integrationen är redan konfigurerad."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Byt busslinje",
+        "data": {
+          "line": "Linjenummer (t.ex. 528)"
+        }
+      }
+    }
+  }
+}

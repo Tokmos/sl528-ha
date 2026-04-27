@@ -1,0 +1,9 @@
+DOMAIN = "sl_528"
+CONF_RT_KEY = "rt_key"
+CONF_STATIC_KEY = "static_key"
+CONF_LINE = "line"
+DEFAULT_LINE = "528"
+SCAN_INTERVAL_SECONDS = 15
+GTFS_RT_URL = "https://opendata.samtrafiken.se/gtfs-rt/sl/VehiclePositions.pb?key={rt_key}"
+GTFS_STATIC_URL = "https://opendata.samtrafiken.se/gtfs/sl/sl.zip?key={static_key}"
+SL_TRANSPORT_API = "https://transport.integration.sl.se/v1"
