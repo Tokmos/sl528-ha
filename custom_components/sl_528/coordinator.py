@@ -40,6 +40,7 @@ class SLBusCoordinator(DataUpdateCoordinator):
         self.static_url = GTFS_STATIC_URL.format(static_key=static_key)
 
         self._route_id: str | None = None
+        self.route_type: str = "700"  # 700=buss, 100-102=tåg, 400=tunnelbana, 900=spårvagn
         self._trip_ids: dict[str, str] = {}
         self._direction_names: dict[str, str] = {}
         self._trips_loaded_at: datetime | None = None
@@ -93,11 +94,13 @@ class SLBusCoordinator(DataUpdateCoordinator):
                 trips = {}
                 with zipfile.ZipFile(io.BytesIO(data)) as z:
                     route_id = None
+                    route_type = "700"
                     with z.open("routes.txt") as f:
                         for row in csv.DictReader(io.TextIOWrapper(f, encoding="utf-8")):
                             name = row.get("route_short_name", "") or row.get("route_long_name", "")
                             if name == line_number:
                                 route_id = row["route_id"]
+                                route_type = row.get("route_type", "700")
                                 break
 
                     if not route_id:
@@ -109,11 +112,14 @@ class SLBusCoordinator(DataUpdateCoordinator):
                             if row.get("route_id") == route_id:
                                 trips[row["trip_id"]] = row.get("direction_id", "0")
 
+                trips["__route_type__"] = route_type
                 return trips
 
-            self._trip_ids = await self.hass.async_add_executor_job(parse, raw)
+            result = await self.hass.async_add_executor_job(parse, raw)
+            self.route_type = result.pop("__route_type__", "700")
+            self._trip_ids = result
             self._trips_loaded_at = datetime.now()
-            _LOGGER.info("Laddade %d trip_ids för linje %s", len(self._trip_ids), self.line)
+            _LOGGER.info("Laddade %d trip_ids för linje %s (route_type=%s)", len(self._trip_ids), self.line, self.route_type)
 
         except Exception as err:
             _LOGGER.error("Fel vid laddning av trips: %s", err)
