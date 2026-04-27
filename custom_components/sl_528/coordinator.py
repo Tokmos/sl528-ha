@@ -24,6 +24,10 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+SLEEP_INTERVAL = timedelta(minutes=5)   # Ingen trafik – kolla igen om 5 min
+ACTIVE_INTERVAL = timedelta(seconds=SCAN_INTERVAL_SECONDS)  # Trafik – kolla var 15:e sek
+NO_TRAFFIC_WINDOW = 60  # Minuter utan avgångar = ingen trafik
+
 
 class SLBusCoordinator(DataUpdateCoordinator):
     """Hämtar GPS-positioner för en valfri SL-busslinje."""
@@ -35,29 +39,25 @@ class SLBusCoordinator(DataUpdateCoordinator):
         self.rt_url = GTFS_RT_URL.format(rt_key=rt_key)
         self.static_url = GTFS_STATIC_URL.format(static_key=static_key)
 
-        # Cache
         self._route_id: str | None = None
-        self._trip_ids: dict[str, str] = {}   # trip_id -> direction_id
-        self._direction_names: dict[str, str] = {}  # direction_id -> destination name
+        self._trip_ids: dict[str, str] = {}
+        self._direction_names: dict[str, str] = {}
         self._trips_loaded_at: datetime | None = None
         self._cancel_nightly: callable | None = None
+        self._traffic_active: bool = True
+        self._sample_site_id: int | None = None  # En hållplats på linjen för trafikcheck
 
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_{line}",
-            update_interval=timedelta(seconds=SCAN_INTERVAL_SECONDS),
+            update_interval=ACTIVE_INTERVAL,
         )
 
     async def async_setup(self) -> None:
-        """Ladda initial data och schemalägg nattlig uppdatering."""
         await self._load_all_static_data()
-
-        # Uppdatera trips.txt varje natt kl 03:00
         self._cancel_nightly = async_track_time_change(
-            self.hass,
-            self._nightly_refresh,
-            hour=3, minute=0, second=0
+            self.hass, self._nightly_refresh, hour=3, minute=0, second=0
         )
 
     async def _nightly_refresh(self, now) -> None:
@@ -69,38 +69,11 @@ class SLBusCoordinator(DataUpdateCoordinator):
             self._cancel_nightly()
 
     async def _load_all_static_data(self) -> None:
-        """Hämta route_id, trip_ids och ändstationer."""
         try:
-            await self._load_route_id()
-            if self._route_id:
-                await self._load_trips()
-                await self._load_direction_names()
+            await self._load_trips()
+            await self._load_direction_names()
         except Exception as err:
             _LOGGER.error("Fel vid laddning av statisk data: %s", err)
-
-    async def _load_route_id(self) -> None:
-        """Slå upp route_id för linjen via Transport API."""
-        url = f"{SL_TRANSPORT_API}/lines?transport_authority_id=1"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    if resp.status != 200:
-                        _LOGGER.warning("Kunde inte hämta linjer: HTTP %s", resp.status)
-                        return
-                    lines = await resp.json()
-
-            _LOGGER.debug("Transport API svarade med typ: %s, exempel: %s", type(lines), str(lines)[:200])
-            for line in lines:
-                if not isinstance(line, dict):
-                    continue
-                if str(line.get("designation", "")) == self.line or str(line.get("name", "")) == self.line:
-                    self._route_id = str(line.get("id", ""))
-                    _LOGGER.debug("Hittade linje %s med id %s", self.line, self._route_id)
-                    return
-
-            _LOGGER.warning("Hittade inte linje %s i Transport API", self.line)
-        except Exception as err:
-            _LOGGER.error("Fel vid hämtning av route_id: %s", err)
 
     async def _load_trips(self) -> None:
         """Ladda trips.txt och bygg trip_id -> direction_id för aktuell linje."""
@@ -119,7 +92,6 @@ class SLBusCoordinator(DataUpdateCoordinator):
             def parse(data: bytes) -> dict[str, str]:
                 trips = {}
                 with zipfile.ZipFile(io.BytesIO(data)) as z:
-                    # Läs routes.txt för att hitta route_id baserat på linjenummer
                     route_id = None
                     with z.open("routes.txt") as f:
                         for row in csv.DictReader(io.TextIOWrapper(f, encoding="utf-8")):
@@ -129,12 +101,9 @@ class SLBusCoordinator(DataUpdateCoordinator):
                                 break
 
                     if not route_id:
-                        _LOGGER.warning("Hittade ingen route_id för linje %s i routes.txt", line_number)
+                        _LOGGER.warning("Hittade ingen route_id för linje %s", line_number)
                         return {}
 
-                    _LOGGER.debug("route_id för linje %s: %s", line_number, route_id)
-
-                    # Läs trips.txt
                     with z.open("trips.txt") as f:
                         for row in csv.DictReader(io.TextIOWrapper(f, encoding="utf-8")):
                             if row.get("route_id") == route_id:
@@ -150,9 +119,8 @@ class SLBusCoordinator(DataUpdateCoordinator):
             _LOGGER.error("Fel vid laddning av trips: %s", err)
 
     async def _load_direction_names(self) -> None:
-        """Hämta ändstationer per riktning via Transport API."""
+        """Hämta ändstationer och en sample-hållplats via Transport API."""
         try:
-            # Hitta line_id via Transport API
             url = f"{SL_TRANSPORT_API}/lines?transport_authority_id=1"
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
@@ -172,7 +140,6 @@ class SLBusCoordinator(DataUpdateCoordinator):
                 self._direction_names = {"0": f"Linje {self.line}", "1": f"Linje {self.line}"}
                 return
 
-            # Hämta hållplatser för linjen
             url = f"{SL_TRANSPORT_API}/lines/{line_id}/stop-points"
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=15)) as resp:
@@ -180,7 +147,6 @@ class SLBusCoordinator(DataUpdateCoordinator):
                         return
                     stop_points = await resp.json()
 
-            # Gruppera per direction och ta första/sista
             stops_by_dir: dict[str, list] = {}
             for sp in stop_points:
                 if not isinstance(sp, dict):
@@ -197,20 +163,86 @@ class SLBusCoordinator(DataUpdateCoordinator):
 
             if direction_names:
                 self._direction_names = direction_names
-                _LOGGER.debug("Ändstationer för linje %s: %s", self.line, direction_names)
             else:
                 self._direction_names = {"0": f"Linje {self.line}", "1": f"Linje {self.line}"}
+
+            # Spara en hållplats att använda för trafikcheck
+            all_stops = [sp for stops in stops_by_dir.values() for sp in stops]
+            mid = all_stops[len(all_stops) // 2] if all_stops else None
+            if mid and isinstance(mid, dict):
+                self._sample_site_id = mid.get("site_id") or mid.get("id")
+                _LOGGER.debug("Sample-hållplats för trafikcheck: %s", self._sample_site_id)
 
         except Exception as err:
             _LOGGER.warning("Kunde inte hämta ändstationer: %s", err)
             self._direction_names = {"0": f"Linje {self.line}", "1": f"Linje {self.line}"}
 
+    async def _is_traffic_active(self) -> bool:
+        """Kolla om det finns avgångar för linjen inom de närmaste 60 minuterna."""
+        if not self._sample_site_id:
+            return True  # Vet inte – anta att trafik pågår
+
+        try:
+            url = f"{SL_TRANSPORT_API}/sites/{self._sample_site_id}/departures"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status != 200:
+                        return True
+                    data = await resp.json()
+
+            departures = data.get("departures", data) if isinstance(data, dict) else data
+            now = datetime.now().astimezone()
+
+            for dep in departures:
+                if not isinstance(dep, dict):
+                    continue
+                line = dep.get("line", {})
+                if not isinstance(line, dict):
+                    continue
+                if str(line.get("designation", "")) != self.line:
+                    continue
+
+                # Kolla om avgången är inom 60 minuter
+                time_str = dep.get("expected") or dep.get("scheduled")
+                if not time_str:
+                    return True
+                try:
+                    from datetime import timezone
+                    dep_time = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+                    diff_minutes = (dep_time - now).total_seconds() / 60
+                    if -5 <= diff_minutes <= NO_TRAFFIC_WINDOW:
+                        return True
+                except Exception:
+                    return True
+
+            return False
+
+        except Exception as err:
+            _LOGGER.debug("Kunde inte kolla trafik: %s", err)
+            return True  # Vid fel – anta trafik pågår
+
     async def _async_update_data(self) -> dict[str, dict]:
-        """Hämta och filtrera fordonspositioner."""
+        """Hämta fordonspositioner om trafik är aktiv, annars sov."""
         if not self._trip_ids:
             await self._load_trips()
             await self._load_direction_names()
 
+        # Kolla om trafik pågår
+        traffic_active = await self._is_traffic_active()
+
+        if not traffic_active:
+            if self._traffic_active:
+                _LOGGER.info("Linje %s: ingen trafik – minskar pollingsfrekvens", self.line)
+            self._traffic_active = False
+            self.update_interval = SLEEP_INTERVAL
+            return {}
+
+        if not self._traffic_active:
+            _LOGGER.info("Linje %s: trafik återupptagen – ökar pollingsfrekvens", self.line)
+        self._traffic_active = True
+        self.update_interval = ACTIVE_INTERVAL
+
+        # Hämta realtidsdata
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
