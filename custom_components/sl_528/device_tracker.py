@@ -1,6 +1,7 @@
 """Device tracker – en entitet per fordon, ikon och namn baserat på linjetyp."""
 from __future__ import annotations
 
+import base64
 import logging
 from typing import Any
 
@@ -16,6 +17,21 @@ from .const import DOMAIN
 from .coordinator import SLBusCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+def _badge_svg(line: str) -> str:
+    """Returnerar en base64-kodad SVG med linjenumret i SL-blå cirkel."""
+    font_size = 16 if len(line) <= 3 else 13
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50">'
+        f'<circle cx="25" cy="25" r="25" fill="#0070BB"/>'
+        f'<text x="25" y="31" text-anchor="middle" dominant-baseline="middle" '
+        f'font-size="{font_size}" font-family="Arial,sans-serif" font-weight="bold" fill="white" dy="3">'
+        f'{line}</text>'
+        f'</svg>'
+    )
+    b64 = base64.b64encode(svg.encode()).decode()
+    return f"data:image/svg+xml;base64,{b64}"
+
 
 # GTFS route_type -> MDI-ikon
 def _icon_for_route_type(route_type: str) -> str:
@@ -80,6 +96,7 @@ class BusTracker(CoordinatorEntity[SLBusCoordinator], TrackerEntity):
         super().__init__(coordinator)
         self._vehicle_id = vehicle_id
         self._attr_unique_id = f"sl_bus_{coordinator.line}_{vehicle_id}"
+        self._attr_entity_picture = _badge_svg(coordinator.line)
 
     @property
     def _data(self) -> dict | None:
