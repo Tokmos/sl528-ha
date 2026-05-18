@@ -19,14 +19,26 @@ from .coordinator import SLBusCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 def _badge_svg(line: str) -> str:
-    """Returnerar en base64-kodad SVG med linjenumret i SL-blå cirkel."""
-    font_size = 16 if len(line) <= 3 else 13
+    """Returnerar en base64-kodad SVG med bussikon och linjenummer."""
+    font_size = 13 if len(line) <= 3 else 10
     svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50">'
-        f'<circle cx="25" cy="25" r="25" fill="#0070BB"/>'
-        f'<text x="25" y="31" text-anchor="middle" dominant-baseline="middle" '
-        f'font-size="{font_size}" font-family="Arial,sans-serif" font-weight="bold" fill="white" dy="3">'
-        f'{line}</text>'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 56">'
+        # Rundad rektangel som bakgrund
+        f'<rect x="0" y="0" width="50" height="50" rx="10" fill="#0070BB"/>'
+        # Busskaross (sidovy)
+        f'<rect x="7" y="7" width="36" height="20" rx="3" fill="white"/>'
+        # Fönster
+        f'<rect x="10" y="10" width="7" height="8" rx="1" fill="#0070BB"/>'
+        f'<rect x="21" y="10" width="7" height="8" rx="1" fill="#0070BB"/>'
+        f'<rect x="32" y="10" width="7" height="8" rx="1" fill="#0070BB"/>'
+        # Hjul
+        f'<circle cx="15" cy="30" r="5" fill="white"/>'
+        f'<circle cx="15" cy="30" r="2.5" fill="#0070BB"/>'
+        f'<circle cx="35" cy="30" r="5" fill="white"/>'
+        f'<circle cx="35" cy="30" r="2.5" fill="#0070BB"/>'
+        # Linjenummer
+        f'<text x="25" y="44" text-anchor="middle" font-size="{font_size}" '
+        f'font-family="Arial,sans-serif" font-weight="bold" fill="white">{line}</text>'
         f'</svg>'
     )
     b64 = base64.b64encode(svg.encode()).decode()
