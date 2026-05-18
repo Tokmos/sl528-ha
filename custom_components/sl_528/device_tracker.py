@@ -18,25 +18,100 @@ from .coordinator import SLBusCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-def _badge_svg(line: str) -> str:
-    """Returnerar en base64-kodad SVG med bussikon och linjenummer."""
+def _svg_bus() -> str:
+    return (
+        '<rect x="7" y="7" width="36" height="20" rx="3" fill="white"/>'
+        '<rect x="10" y="10" width="7" height="8" rx="1" fill="#0070BB"/>'
+        '<rect x="21" y="10" width="7" height="8" rx="1" fill="#0070BB"/>'
+        '<rect x="32" y="10" width="7" height="8" rx="1" fill="#0070BB"/>'
+        '<circle cx="15" cy="30" r="5" fill="white"/>'
+        '<circle cx="15" cy="30" r="2.5" fill="#0070BB"/>'
+        '<circle cx="35" cy="30" r="5" fill="white"/>'
+        '<circle cx="35" cy="30" r="2.5" fill="#0070BB"/>'
+    )
+
+
+def _svg_train() -> str:
+    return (
+        '<rect x="5" y="9" width="40" height="19" rx="3" fill="white"/>'
+        # Pantograf
+        '<line x1="18" y1="9" x2="16" y2="5" stroke="white" stroke-width="1.5"/>'
+        '<line x1="16" y1="5" x2="34" y2="5" stroke="white" stroke-width="1.5"/>'
+        '<line x1="34" y1="5" x2="32" y2="9" stroke="white" stroke-width="1.5"/>'
+        '<rect x="8" y="12" width="9" height="9" rx="1" fill="#0070BB"/>'
+        '<rect x="21" y="12" width="9" height="9" rx="1" fill="#0070BB"/>'
+        '<rect x="33" y="12" width="8" height="9" rx="1" fill="#0070BB"/>'
+        # Bogier
+        '<rect x="9" y="27" width="8" height="4" rx="2" fill="white"/>'
+        '<rect x="33" y="27" width="8" height="4" rx="2" fill="white"/>'
+    )
+
+
+def _svg_subway() -> str:
+    return (
+        # Mer rundad kropp (tunnelbanans karaktär)
+        '<rect x="4" y="9" width="42" height="19" rx="8" fill="white"/>'
+        '<rect x="8" y="12" width="10" height="10" rx="2" fill="#0070BB"/>'
+        '<rect x="21" y="12" width="10" height="10" rx="2" fill="#0070BB"/>'
+        '<rect x="34" y="12" width="8" height="10" rx="2" fill="#0070BB"/>'
+        '<rect x="9" y="27" width="7" height="4" rx="2" fill="white"/>'
+        '<rect x="34" y="27" width="7" height="4" rx="2" fill="white"/>'
+    )
+
+
+def _svg_tram() -> str:
+    return (
+        # Platt och bred spårvagnskropp
+        '<rect x="4" y="10" width="42" height="17" rx="5" fill="white"/>'
+        # Pantograf
+        '<line x1="17" y1="10" x2="15" y2="6" stroke="white" stroke-width="1.5"/>'
+        '<line x1="15" y1="6" x2="35" y2="6" stroke="white" stroke-width="1.5"/>'
+        '<line x1="35" y1="6" x2="33" y2="10" stroke="white" stroke-width="1.5"/>'
+        '<rect x="7" y="13" width="7" height="8" rx="1" fill="#0070BB"/>'
+        '<rect x="17" y="13" width="7" height="8" rx="1" fill="#0070BB"/>'
+        '<rect x="27" y="13" width="7" height="8" rx="1" fill="#0070BB"/>'
+        '<rect x="37" y="13" width="5" height="8" rx="1" fill="#0070BB"/>'
+        '<circle cx="13" cy="30" r="4" fill="white"/>'
+        '<circle cx="13" cy="30" r="2" fill="#0070BB"/>'
+        '<circle cx="37" cy="30" r="4" fill="white"/>'
+        '<circle cx="37" cy="30" r="2" fill="#0070BB"/>'
+    )
+
+
+def _svg_ferry() -> str:
+    return (
+        # Kajuta
+        '<rect x="11" y="7" width="28" height="14" rx="2" fill="white"/>'
+        '<rect x="14" y="10" width="6" height="7" rx="1" fill="#0070BB"/>'
+        '<rect x="23" y="10" width="6" height="7" rx="1" fill="#0070BB"/>'
+        '<rect x="32" y="10" width="4" height="7" rx="1" fill="#0070BB"/>'
+        # Mast
+        '<rect x="22" y="3" width="3" height="5" fill="white"/>'
+        # Skrov
+        '<path d="M4,21 L6,29 Q25,35 44,29 L46,21 Z" fill="white"/>'
+    )
+
+
+def _badge_svg(line: str, route_type: str = "700") -> str:
+    """Returnerar en base64-kodad SVG med trafikslagsanpassad ikon och linjenummer."""
     font_size = 13 if len(line) <= 3 else 10
+    rt = int(route_type) if route_type.isdigit() else 700
+
+    if 100 <= rt < 200:
+        vehicle = _svg_train()
+    elif 400 <= rt < 500:
+        vehicle = _svg_subway()
+    elif rt == 900:
+        vehicle = _svg_tram()
+    elif 1000 <= rt < 1100:
+        vehicle = _svg_ferry()
+    else:
+        vehicle = _svg_bus()
+
     svg = (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 56">'
-        # Rundad rektangel som bakgrund
         f'<rect x="0" y="0" width="50" height="50" rx="10" fill="#0070BB"/>'
-        # Busskaross (sidovy)
-        f'<rect x="7" y="7" width="36" height="20" rx="3" fill="white"/>'
-        # Fönster
-        f'<rect x="10" y="10" width="7" height="8" rx="1" fill="#0070BB"/>'
-        f'<rect x="21" y="10" width="7" height="8" rx="1" fill="#0070BB"/>'
-        f'<rect x="32" y="10" width="7" height="8" rx="1" fill="#0070BB"/>'
-        # Hjul
-        f'<circle cx="15" cy="30" r="5" fill="white"/>'
-        f'<circle cx="15" cy="30" r="2.5" fill="#0070BB"/>'
-        f'<circle cx="35" cy="30" r="5" fill="white"/>'
-        f'<circle cx="35" cy="30" r="2.5" fill="#0070BB"/>'
-        # Linjenummer
+        f'{vehicle}'
         f'<text x="25" y="44" text-anchor="middle" font-size="{font_size}" '
         f'font-family="Arial,sans-serif" font-weight="bold" fill="white">{line}</text>'
         f'</svg>'
@@ -108,7 +183,7 @@ class BusTracker(CoordinatorEntity[SLBusCoordinator], TrackerEntity):
         super().__init__(coordinator)
         self._vehicle_id = vehicle_id
         self._attr_unique_id = f"sl_bus_{coordinator.line}_{vehicle_id}"
-        self._attr_entity_picture = _badge_svg(coordinator.line)
+        self._attr_entity_picture = _badge_svg(coordinator.line, coordinator.route_type)
 
     @property
     def _data(self) -> dict | None:
