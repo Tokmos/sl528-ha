@@ -92,8 +92,8 @@ def _svg_ferry() -> str:
     )
 
 
-def _badge_svg(line: str, route_type: str = "700") -> str:
-    """Returnerar en base64-kodad SVG med trafikslagsanpassad ikon och linjenummer."""
+def _badge_svg(line: str, route_type: str = "700", destination: str = "") -> str:
+    """Returnerar en base64-kodad SVG med trafikslagsanpassad ikon, linjenummer och destination."""
     font_size = 13 if len(line) <= 3 else 10
     rt = int(route_type) if route_type.isdigit() else 700
 
@@ -108,12 +108,24 @@ def _badge_svg(line: str, route_type: str = "700") -> str:
     else:
         vehicle = _svg_bus()
 
+    # Rensa bort "→ " och trunkera för att passa i badge
+    dest = destination.lstrip("→").strip()
+    dest = (dest[:9] + "…") if len(dest) > 9 else dest
+    # XML-escape
+    dest = dest.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    dest_line = (
+        f'<text x="25" y="57" text-anchor="middle" font-size="8" '
+        f'font-family="Arial,sans-serif" fill="white" opacity="0.85">{dest}</text>'
+    ) if dest else ""
+
     svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 56">'
-        f'<rect x="0" y="0" width="50" height="50" rx="10" fill="#0070BB"/>'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 62">'
+        f'<rect x="0" y="0" width="50" height="62" rx="10" fill="#0070BB"/>'
         f'{vehicle}'
         f'<text x="25" y="44" text-anchor="middle" font-size="{font_size}" '
         f'font-family="Arial,sans-serif" font-weight="bold" fill="white">{line}</text>'
+        f'{dest_line}'
         f'</svg>'
     )
     b64 = base64.b64encode(svg.encode()).decode()
@@ -183,7 +195,19 @@ class BusTracker(CoordinatorEntity[SLBusCoordinator], TrackerEntity):
         super().__init__(coordinator)
         self._vehicle_id = vehicle_id
         self._attr_unique_id = f"sl_bus_{coordinator.line}_{vehicle_id}"
-        self._attr_entity_picture = _badge_svg(coordinator.line, coordinator.route_type)
+        self._update_picture()
+
+    def _update_picture(self) -> None:
+        d = self.coordinator.data.get(self._vehicle_id, {})
+        destination = d.get("destination", "")
+        self._attr_entity_picture = _badge_svg(
+            self.coordinator.line, self.coordinator.route_type, destination
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self._update_picture()
+        super()._handle_coordinator_update()
 
     @property
     def _data(self) -> dict | None:
