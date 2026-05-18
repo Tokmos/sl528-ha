@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import io
 import csv
+import json
 import logging
+import os
 import zipfile
 from datetime import datetime, timedelta
 
@@ -56,8 +58,55 @@ class SLBusCoordinator(DataUpdateCoordinator):
             update_interval=ACTIVE_INTERVAL,
         )
 
+    def _cache_path(self) -> str:
+        storage = os.path.join(self.hass.config.config_dir, ".storage")
+        return os.path.join(storage, f"sl_528_cache_{self.line}.json")
+
+    def _load_from_cache(self) -> bool:
+        """Ladda statisk data från disk. Returnerar True om cachen är giltig (< 2 dygn)."""
+        try:
+            path = self._cache_path()
+            if not os.path.exists(path):
+                return False
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            cached_at = datetime.fromisoformat(data["cached_at"])
+            if datetime.now() - cached_at > timedelta(days=2):
+                _LOGGER.debug("Cache för linje %s är för gammal – hämtar ny", self.line)
+                return False
+            self._trip_ids = data["trip_ids"]
+            self.route_type = data.get("route_type", "700")
+            self._direction_names = data.get("direction_names", {})
+            self._sample_site_id = data.get("sample_site_id")
+            self._trips_loaded_at = cached_at
+            _LOGGER.info("Laddade linje %s från cache (%d trip_ids)", self.line, len(self._trip_ids))
+            return True
+        except Exception as err:
+            _LOGGER.warning("Kunde inte läsa cache: %s", err)
+            return False
+
+    def _save_to_cache(self) -> None:
+        """Spara statisk data till disk."""
+        try:
+            data = {
+                "line": self.line,
+                "route_type": self.route_type,
+                "trip_ids": self._trip_ids,
+                "direction_names": self._direction_names,
+                "sample_site_id": self._sample_site_id,
+                "cached_at": datetime.now().isoformat(),
+            }
+            path = self._cache_path()
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+            _LOGGER.debug("Sparade cache för linje %s", self.line)
+        except Exception as err:
+            _LOGGER.warning("Kunde inte spara cache: %s", err)
+
     async def async_setup(self) -> None:
-        await self._load_all_static_data()
+        if not self._load_from_cache():
+            await self._load_all_static_data()
         self._cancel_nightly = async_track_time_change(
             self.hass, self._nightly_refresh, hour=3, minute=0, second=0
         )
@@ -74,6 +123,7 @@ class SLBusCoordinator(DataUpdateCoordinator):
         try:
             await self._load_trips()
             await self._load_direction_names()
+            self._save_to_cache()
         except Exception as err:
             _LOGGER.error("Fel vid laddning av statisk data: %s", err)
 
