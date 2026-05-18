@@ -47,6 +47,7 @@ class SLBusCoordinator(DataUpdateCoordinator):
         self._cancel_nightly: callable | None = None
         self._traffic_active: bool = True
         self._sample_site_id: int | None = None  # En hållplats på linjen för trafikcheck
+        self._static_retry_after: datetime | None = None  # Backoff vid 429
 
         super().__init__(
             hass,
@@ -84,6 +85,9 @@ class SLBusCoordinator(DataUpdateCoordinator):
                 async with session.get(
                     self.static_url, timeout=aiohttp.ClientTimeout(total=120)
                 ) as resp:
+                    if resp.status == 429:
+                        self._static_retry_after = datetime.now() + timedelta(minutes=30)
+                        raise UpdateFailed("HTTP 429 vid hämtning av statisk data – väntar 30 min")
                     if resp.status != 200:
                         raise UpdateFailed(f"HTTP {resp.status} vid hämtning av statisk data")
                     raw = await resp.read()
@@ -230,6 +234,9 @@ class SLBusCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, dict]:
         """Hämta fordonspositioner om trafik är aktiv, annars sov."""
         if not self._trip_ids:
+            if self._static_retry_after and datetime.now() < self._static_retry_after:
+                _LOGGER.debug("Statisk data rate-limitad – väntar till %s", self._static_retry_after)
+                return {}
             await self._load_trips()
             await self._load_direction_names()
 
