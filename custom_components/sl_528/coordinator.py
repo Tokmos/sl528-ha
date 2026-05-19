@@ -71,7 +71,7 @@ class SLBusCoordinator(DataUpdateCoordinator):
             with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             cached_at = datetime.fromisoformat(data["cached_at"])
-            if datetime.now() - cached_at > timedelta(days=2):
+            if datetime.now() - cached_at > timedelta(days=7):
                 _LOGGER.debug("Cache för linje %s är för gammal – hämtar ny", self.line)
                 return False
             self._trip_ids = data["trip_ids"]
@@ -112,6 +112,10 @@ class SLBusCoordinator(DataUpdateCoordinator):
         )
 
     async def _nightly_refresh(self, now) -> None:
+        """Uppdatera bara om cachen är äldre än 6 dagar – sparar API-quota."""
+        if self._trips_loaded_at and datetime.now() - self._trips_loaded_at < timedelta(days=6):
+            _LOGGER.debug("Cache för linje %s är färsk – hoppar över nattlig uppdatering", self.line)
+            return
         _LOGGER.info("Nattlig uppdatering av GTFS-data för linje %s", self.line)
         await self._load_all_static_data()
 
