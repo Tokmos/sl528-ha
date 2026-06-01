@@ -7,7 +7,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DOMAIN, GTFS_RT_URL, DEFAULT_LINE
+from .const import DOMAIN, GTFS_RT_URL, DEFAULT_LINE, CONF_MAP_LAT, CONF_MAP_LON, CONF_MAP_ZOOM, DEFAULT_MAP_ZOOM
 
 STEP_SCHEMA = vol.Schema({
     vol.Required("rt_key"): str,
@@ -65,7 +65,7 @@ class SLBusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class SLBusOptionsFlow(config_entries.OptionsFlow):
-    """Options flow – byt linje utan att installera om."""
+    """Options flow – byt linje och kartinställningar utan att installera om."""
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
@@ -74,13 +74,26 @@ class SLBusOptionsFlow(config_entries.OptionsFlow):
                 data=user_input,
             )
 
-        current_line = self.config_entry.options.get(
-            "line", self.config_entry.data.get("line", DEFAULT_LINE)
-        )
+        opts = self.config_entry.options
+        data = self.config_entry.data
+
+        current_line = opts.get("line", data.get("line", DEFAULT_LINE))
+        current_lat  = opts.get(CONF_MAP_LAT,  data.get(CONF_MAP_LAT,  self._get_home_lat()))
+        current_lon  = opts.get(CONF_MAP_LON,  data.get(CONF_MAP_LON,  self._get_home_lon()))
+        current_zoom = opts.get(CONF_MAP_ZOOM, data.get(CONF_MAP_ZOOM, DEFAULT_MAP_ZOOM))
 
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required("line", default=current_line): str,
+                vol.Optional(CONF_MAP_LAT,  default=current_lat):  vol.Coerce(float),
+                vol.Optional(CONF_MAP_LON,  default=current_lon):  vol.Coerce(float),
+                vol.Optional(CONF_MAP_ZOOM, default=current_zoom): vol.All(int, vol.Range(min=1, max=20)),
             }),
         )
+
+    def _get_home_lat(self) -> float:
+        return self.hass.config.latitude or 59.3293
+
+    def _get_home_lon(self) -> float:
+        return self.hass.config.longitude or 18.0686
